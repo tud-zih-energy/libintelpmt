@@ -20,15 +20,15 @@ int main(int argc, char **argv) {
 
   std::string command = argv[1];
   if (command == "list") {
-    std::vector<intelpmt::Device> devices = intelpmt::get_pmt_devices();
+    auto devices = intelpmt::get_pmt_devices();
     std::cout << "List: " << std::endl;
 
     for (auto &dev : devices) {
       std::cout << std::endl;
-      std::cout << dev.get_path().string() << std::hex << "("
-                << dev.get_uniqueid() << "):" << std::endl;
-      for (auto &ev : dev.get_counter_names()) {
-        std::cout << "\t" << ev.first << std::endl;
+      std::cout << dev->get_path().string() << std::hex << "("
+                << dev->get_uniqueid() << "):" << std::endl;
+      for (auto &ev : dev->get_counters()) {
+        std::cout << "\t" << ev << std::endl;
       }
     }
 
@@ -43,10 +43,10 @@ int main(int argc, char **argv) {
 
     std::string device_path = argv[2];
     std::string counter = argv[3];
-    std::vector<intelpmt::Device> devices = intelpmt::get_pmt_devices();
+    auto devices = intelpmt::get_pmt_devices();
     auto dev =
-        std::find_if(devices.begin(), devices.end(), [&device_path](auto arg) {
-          return arg.get_path() == device_path;
+        std::find_if(devices.begin(), devices.end(), [&device_path](auto& arg) {
+          return arg->get_path() == device_path;
         });
 
     if (dev == devices.end()) {
@@ -56,26 +56,26 @@ int main(int argc, char **argv) {
 
     uint64_t counter_id = 0;
     try {
-      counter_id = dev->get_counter_names().at(counter);
+      counter_id = dev->get()->get_counter_id_by_name(counter);
     } catch (std::out_of_range &e) {
       std::cout << "Unknown counter: " << counter << std::endl;
       return -1;
     }
 
-    intelpmt::DeviceInstance instance = dev->open();
+    intelpmt::DeviceInstance instance(*dev);
 
     std::cout << "Reading: " << counter
               << " every second until Ctrl+C is pressed" << std::endl;
 
     while (true) {
         double val = instance.read_counter(counter_id);
-        if(dev->get_units().at(counter_id).unit == "enum")
+        if(dev->get()->get_unit_by_id(counter_id).unit == "enum")
         {   
-            std::cout << dev->get_units().at(counter_id).print_function(val) << std::endl;
+            std::cout << dev->get()->get_unit_by_id(counter_id).print_function(val) << std::endl;
         }
         else
         {
-          std::cout << val << " " << dev->get_units().at(counter_id).unit
+          std::cout << val << " " << dev->get()->get_unit_by_id(counter_id).unit
                     << std::endl;
         }
       std::this_thread::sleep_for(std::chrono::seconds(1));

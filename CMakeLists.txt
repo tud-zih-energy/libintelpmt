@@ -6,7 +6,7 @@ execute_process(COMMAND python ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_pmt_headers
 
 file(GLOB GENERATED_FILES ${CMAKE_CURRENT_BINARY_DIR}/src/*)
 
-add_library(libintelpmt src/device.cpp ${GENERATED_FILES})
+add_library(libintelpmt  ${GENERATED_FILES})
 
 target_include_directories(libintelpmt PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/include include)
 

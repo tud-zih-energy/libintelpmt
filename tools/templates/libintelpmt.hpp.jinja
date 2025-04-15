@@ -6,14 +6,16 @@
 
 #include <filesystem>
 #include <iostream>
+#include <memory>
+
 #pragma once
 
 namespace intelpmt
 {
 
-std::vector <Device>& get_pmt_devices()
+std::vector <std::unique_ptr<Device>> get_pmt_devices()
 {
-    static std::vector<Device> dev;
+    std::vector<std::unique_ptr<Device>> dev;
 
     if (dev.size() == 0)
     {
@@ -32,7 +34,7 @@ std::vector <Device>& get_pmt_devices()
     {% if loop.first %} if {% else %} else if {% endif %} 
         (uniqueid == "{{uniqueid}}")
         {
-            dev.emplace_back(PMT_{{uniqueid}}(dir.path()));
+            dev.emplace_back(std::make_unique<PMT_{{uniqueid}}>(dir.path()));
         }
 {% endfor %}
         else

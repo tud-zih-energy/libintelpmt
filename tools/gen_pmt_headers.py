@@ -42,6 +42,7 @@ def normalize_counter_name(name):
 
 
 def normalize_counter_type(name):
+    name = normalize_trans_name(name)
     name = name.replace("[", "_")
     name = name.replace("]", "_")
     return name.replace(" ", "_")
@@ -103,6 +104,17 @@ def parse_aggr_interface(filename):
             + "::"
             + elem.attrib["sampleName"]
         )
+
+        description = elem.find("{*}description").text
+
+        # It would be too easy if there were just one way to mark a counter as reserved, would it?
+        if description is not None:
+            if "reserved" in description:
+                name = "reserved"
+
+            if "Reserved" in description:
+                name = "reserved"
+
         counter_type = normalize_counter_type(
             normalize_counter_name(elem.attrib["sampleGroup"])
             + "_"
@@ -113,12 +125,16 @@ def parse_aggr_interface(filename):
         # skip em
         if "reserved" in name.lower():
             continue
+
         inputs = []
         datatype = elem.attrib['datatypeIDREF']
         for input in elem.iter("{*}TransFormInput"):
             input_group = input.find("{*}sampleGroupIDREF").text
             input_id = input.find("{*}sampleIDREF").text
             inputs.append(normalize_counter_type(input_group + "_" + input_id))
+
+        for i in range(2 - len(inputs)):
+            inputs.append("LIBINTELPMT_UNDEFINED")
         trans_func = normalize_trans_name(elem.find("{*}transformREF").text)
         aggregators.append(
             {

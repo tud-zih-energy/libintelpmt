@@ -1,13 +1,17 @@
 #include <libintelpmt/pmt_{{uniqueid}}.hpp>
 
+#include <array>
+
 namespace intelpmt
 {
+
+
 {% for transformation in transformations %}
-static double calc_{{transformation['name']}}(DeviceInstance &device, std::vector<uint64_t> args)
+static double calc_{{transformation['name']}}(DeviceInstance &device, uint64_t input1, uint64_t input2)
 {
-    uint64_t parameter_0 = device.read_sample(args[0]);
+    uint64_t parameter_0 = device.read_sample(input1);
     {% if transformation['twoargs'] %}
-    uint64_t parameter_1 = device.read_sample(args[1]);
+    uint64_t parameter_1 = device.read_sample(input2);
     {% endif %}
 
     {% if transformation['type'] == 'float' %}
@@ -21,7 +25,7 @@ static double calc_{{transformation['name']}}(DeviceInstance &device, std::vecto
 
 {% for name, datatype in datatypes.items() %}
     {% if datatype['type'] == 'enum' %}
-static std::string print_{{name}}(double value)
+static const char *print_{{name}}(double value)
 {
         {% for value in datatype['values'] %}
     {% if loop.first %} if {% else %} else if {% endif %} ( value == {{value[0]}})
@@ -35,55 +39,121 @@ static std::string print_{{name}}(double value)
     {% endif %}
 {% endfor %}
 
-
-PMT_{{uniqueid}}::PMT_{{uniqueid}}(std::filesystem::path path)
-        : Device(path)
-{
-    uniqueid_ = 0x{{uniqueid}};
-    counter_names_ = { 
+static constexpr std::array<std::pair<const char *, uint64_t>, {{aggregators|length}}>  PMT_{{uniqueid}}_counter_names { { 
 {% for aggregator in aggregators %}
-        { "{{aggregator['name']}}", (uint64_t)CounterType::{{aggregator['type']}} } {% if not loop.last %}, {%endif%}
+        { "{{aggregator['name']}}", (uint64_t)PMT_{{uniqueid}}::CounterType::{{aggregator['type']}} } {% if not loop.last %}, {%endif%}
 
 {% endfor %}
-    };
+    } };
 
-    samples_ = {
+static constexpr std::array<std::pair<uint64_t, struct Sample>, {{samples|length}}> 
+PMT_{{uniqueid}}_samples { {
 {% for sample in samples %}
-        { (uint64_t)SampleType::{{sample['name']}}, { {{sample['offset']}}, {{sample['size']}} } } {% if not loop.last %}, {%endif%}
+        { (uint64_t)PMT_{{uniqueid}}::SampleType::{{sample['name']}}, { {{sample['offset']}}, {{sample['size']}} } } {% if not loop.last %}, {%endif%}
 
 {% endfor %}
-    };
+ 
+ } };
 
-    counters_ = {
+static constexpr std::array<std::pair<uint64_t, struct Unit>, {{aggregators|length}}>
+PMT_{{uniqueid}}_units { {
 {% for aggregator in aggregators %}
-        {  (uint64_t)CounterType::{{aggregator['type']}}, { calc_{{aggregator['function']}}, { 
-    {% for input in aggregator['inputs'] %}
-        (uint64_t)SampleType::{{input}} {% if not loop.last %}, {% endif %}
-
-    {% endfor %}
-    } } } {% if not loop.last %}, {% endif %}
-    
-{% endfor %}
-
-    };
-
-    units_ = {
-{% for aggregator in aggregators %}
-        {  (uint64_t)CounterType::{{aggregator['type']}},
-        {% if datatypes[aggregator['datatype']]['type'] == 'enum' %}
-            { "enum", print_{{aggregator['datatype']}} } 
+        {  (uint64_t)PMT_{{uniqueid}}::CounterType::{{aggregator['type']}},
+        {% if aggregator['datatype'] not in datatypes %}
+            { "#", nullptr}
         {% else %}
-            {% if datatypes[aggregator['datatype']]['unit'] ==  None %}
-            { "#", nullptr }
+            {% if datatypes[aggregator['datatype']]['type'] == 'enum' %}
+                { "enum", print_{{aggregator['datatype']}} } 
             {% else %}
-            { "{{datatypes[aggregator['datatype']]['unit']}}", nullptr }             
+                {% if datatypes[aggregator['datatype']]['unit'] ==  None %}
+                    { "#", nullptr }
+                {% else %}
+                    { "{{datatypes[aggregator['datatype']]['unit']}}", nullptr }             
+                {% endif %}
             {% endif %}
         {% endif %}
 
         }{% if not loop.last %}, {% endif %}
 
 {% endfor %}
+} } ;
 
-};
+static constexpr std::array<std::pair<uint64_t, struct Counter>, {{aggregators|length}}> PMT_{{uniqueid}}_counters { {
+    {% for aggregator in aggregators %}
+    {  (uint64_t)PMT_{{uniqueid}}::CounterType::{{aggregator['type']}}, { calc_{{aggregator['function']}}, { 
+    {% for input in aggregator['inputs'] %}
+        (uint64_t)PMT_{{uniqueid}}::SampleType::{{input}} {% if not loop.last %}, {% endif %}
+
+    {% endfor %}
+    } } } {% if not loop.last %}, {% endif %}
+    
+{% endfor %}
+
+    } };
+
+PMT_{{uniqueid}}::PMT_{{uniqueid}}(std::filesystem::path path)
+        : Device(path)
+{
+    uniqueid_ = 0x{{uniqueid}};
+}
+
+uint64_t PMT_{{uniqueid}}::get_counter_id_by_name(const std::string &name)
+{
+    for(const auto &counter : PMT_{{uniqueid}}_counter_names)
+    {
+        if(strcmp(name.c_str(), counter.first) == 0)
+        {
+            return counter.second;
+        }
+    }
+    throw std::runtime_error("Unknown counter!");
+}
+
+const Counter& PMT_{{uniqueid}}::get_counter_by_id(uint64_t id)
+{
+    for(const auto &counter : PMT_{{uniqueid}}_counters)
+    {
+        if(counter.first == id)
+        {
+            return counter.second;
+        }
+    }
+    throw std::runtime_error("Unknown Counter!");
+}
+
+const Sample& PMT_{{uniqueid}}::get_sample_by_id(uint64_t id)
+{
+    for(const auto &sample : PMT_{{uniqueid}}_samples)
+    {
+        if(sample.first == id)
+        {
+            return sample.second;
+        }
+    }
+
+    throw std::runtime_error("Unknown Counter!");
+}
+
+const Unit& PMT_{{uniqueid}}::get_unit_by_id(uint64_t id)
+{
+    for(const auto& unit : PMT_{{uniqueid}}_units)
+    {
+        if(unit.first == id)
+        {
+            return unit.second;
+        }
+    }
+    throw std::runtime_error("Unknwon Counter!");
+}
+
+std::vector <std::string> PMT_{{uniqueid}}::get_counters()
+{
+    std::vector <std::string> res;
+    for(const auto& counter : PMT_{{uniqueid}}_counter_names)
+    {
+        res.emplace_back(counter.first);
+    }
+    return res;
 }
 }
+

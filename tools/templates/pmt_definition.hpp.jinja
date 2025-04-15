@@ -17,17 +17,28 @@ class PMT_{{uniqueid}} : public Device
     public:
     enum class SampleType : uint64_t {
         {% for sample in samples %}
-            {{sample['name']}}{% if not loop.last %},{%endif%}
-
+            {{sample['name']}},
         {% endfor %}
+        LIBINTELPMT_UNDEFINED
     };
     enum class CounterType : uint64_t {
         {% for aggregator in aggregators %}
-            {{aggregator['type']}} {% if not loop.last %},{%endif%}
-
+            {{aggregator['type']}},
         {% endfor %}
+        LIBINTELPMT_UNDEFINED
     };
+
     
+  uint64_t get_counter_id_by_name(const std::string &name) override;
+
+  const Counter& get_counter_by_id(uint64_t id) override;
+
+  const Sample& get_sample_by_id(uint64_t id) override;
+
+
+  const struct Unit& get_unit_by_id(uint64_t id) override;
+
+  std::vector<std::string> get_counters() override;
     PMT_{{uniqueid}}(std::filesystem::path path);
 };
 

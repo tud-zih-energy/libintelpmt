@@ -2,25 +2,28 @@ import sys
 import re
 import os
 
-from predefined import predefined
 from lxml import etree
 import jinja2
 
+
 dirname = os.path.dirname(__file__)
+
 xmlparser = etree.XMLParser(
     ns_clean=True, remove_comments=True, remove_blank_text=True, resolve_entities=False
 )
-
-# sample: name, offset, size
-# transformer name, function
-# interface name, function, inputs = []
-
 
 # the XML uses **, which is not C++, use pow instead
 def replace_pow_operator(text):
     m = re.match(r"(.*)([0-9_$a-z]+)\s*\*\*\s*([0-9_$a-z]+)(.*)", text)
     if m:
         return m.group(1) + "pow(" + m.group(2) + "," + m.group(3) + ")" + m.group(4)
+    return text
+
+# replace foo / bar with foo / (double) bar, so float division is used
+def replace_division_operator(text):
+    m = re.match(r"(.*)\/(.*)", text)
+    if m:
+        return m.group(1) + "/ (double)" + m.group(2) 
     return text
 
 
@@ -51,34 +54,34 @@ def normalize_counter_type(name):
 def parse_data_type(filename):
     datatypes = {}
     common_filename = filename[:-15] + "_common.xml"
-    tree =  etree.parse(common_filename, xmlparser)
+    tree = etree.parse(common_filename, xmlparser)
     common = tree.getroot()
     for elem in common.findall("{*}dataType"):
         datatype = {}
-        name = elem.attrib['datatypeID']
+        name = elem.attrib["datatypeID"]
 
         enum = elem.find("{*}enum")
         if enum is not None:
-            datatype['type'] = 'enum'
-            datatype['values'] = []
+            datatype["type"] = "enum"
+            datatype["values"] = []
             for enum_item in enum.findall("{*}enum_item"):
-            
                 enum_type = enum_item.find("{*}dataType").text
-                assert(enum_type == "string")
-                
+                assert enum_type == "string"
+
                 enum_item_enc = enum_item.find("{*}encoding").text
                 enum_item_value = enum_item.find("{*}value").text
-                datatype['values'].append([enum_item_enc, enum_item_value])
+                datatype["values"].append([enum_item_enc, enum_item_value])
         else:
-            datatype['type'] = 'scalar'
+            datatype["type"] = "scalar"
             unit = elem.find("{*}units")
             if unit is None:
-                datatype['unit'] = "#";
+                datatype["unit"] = "#"
             else:
                 symbol = unit.find("{*}symbol")
-                datatype['unit'] = symbol.text
+                datatype["unit"] = symbol.text
         datatypes[name] = datatype
     return datatypes
+
 
 def parse_aggr_interface(filename):
     transformations = []
@@ -87,9 +90,11 @@ def parse_aggr_interface(filename):
     aggr_interface = etree.parse(aggr_interface_filename, xmlparser).getroot()
     for elem in aggr_interface.iter("{*}TransFormation"):
         trans_func = replace_pow_operator(elem.find("{*}transform").text)
+        trans_func = replace_division_operator(trans_func)
+        trans_func = trans_func.replace("$param", "param")
         trans_func = trans_func.replace("$param", "param")
         transformation = {}
-        transformation['type'] = elem.find("{*}output_dataclass").text
+        transformation["type"] = elem.find("{*}output_dataclass").text
         transformation["name"] = normalize_trans_name(elem.attrib["transformID"])
         transformation["function"] = trans_func
 
@@ -127,7 +132,7 @@ def parse_aggr_interface(filename):
             continue
 
         inputs = []
-        datatype = elem.attrib['datatypeIDREF']
+        datatype = elem.attrib["datatypeIDREF"]
         for input in elem.iter("{*}TransFormInput"):
             input_group = input.find("{*}sampleGroupIDREF").text
             input_id = input.find("{*}sampleIDREF").text
@@ -140,7 +145,7 @@ def parse_aggr_interface(filename):
             {
                 "name": name,
                 "type": counter_type,
-                "datatype" : datatype,
+                "datatype": datatype,
                 "function": trans_func,
                 "inputs": inputs,
             }
@@ -168,7 +173,7 @@ templateEnv = jinja2.Environment(
 )
 header_template = templateEnv.get_template("pmt_definition.hpp.jinja")
 cpp_template = templateEnv.get_template("pmt_definition.cpp.jinja")
-union_header_template = templateEnv.get_template("libintelpmt.hpp.jinja")
+union_header_template = templateEnv.get_template("libintelpmt.cpp.jinja")
 
 os.makedirs(dest_dir + "/include/libintelpmt", exist_ok=True)
 os.makedirs(dest_dir + "/src", exist_ok=True)
@@ -211,21 +216,6 @@ for file in aggregator_files:
     ).dump(dest_dir + "/src/pmt_" + uniqueid + ".cpp")
 
 
-for uniqueid, device in predefined.items():
-    header_template.stream(
-        uniqueid=uniqueid,
-        datatypes=device['datatypes'],
-        transformations=device['transformations'],
-        aggregators=device['aggregators'],
-        samples=device['samples']
-    ).dump(dest_dir + "/include/libintelpmt/pmt_" + uniqueid + ".hpp")
-    cpp_template.stream(
-        uniqueid=uniqueid,
-        datatypes=device['datatypes'],
-        transformations=device['transformations'],
-        aggregators=device['aggregators'],
-        samples=device['samples']
-        ).dump(dest_dir + "/src/pmt_" + uniqueid + ".cpp")
-    uniqueids.append(uniqueid)
-
-union_header_template.stream(uniqueids=uniqueids).dump(dest_dir + "/include/libintelpmt/libintelpmt.hpp")
+union_header_template.stream(uniqueids=uniqueids).dump(
+    dest_dir + "/src/libintelpmt.cpp"
+)

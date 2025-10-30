@@ -8,8 +8,6 @@
 #include <iostream>
 #include <memory>
 
-#pragma once
-
 namespace intelpmt
 {
 
@@ -45,4 +43,9 @@ std::vector <std::unique_ptr<Device>> get_pmt_devices()
     }
     return dev;
 }
+
 }
+
+{% for uniqueid in uniqueids %}
+#include "pmt_{{uniqueid}}.cpp"
+{% endfor %}
